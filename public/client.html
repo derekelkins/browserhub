@@ -2,6 +2,10 @@
 <head>
 <title>Client</title>
 <script type="text/javascript" src="lib/jquery-1.9.1.min.js"></script>
+</head>
+<body>
+<h1>Client</h1>
+<div id="foo"></div>
 <script type="text/javascript">
 'use strict';
 
@@ -9,6 +13,7 @@ var RTCPeerConnection = mozRTCPeerConnection;
 var RTCSessionDescription = mozRTCSessionDescription;
 
 var client = new RTCPeerConnection();
+var theDiv = document.getElementById('foo');
 
 function error(s) { return function() { console.log('ERR: '+s); }; }
 
@@ -16,11 +21,10 @@ client.ondatachannel = function(channel) {
     console.log('ondatachannel');
     channel.onmessage = function(m) {
         console.log('onmessage');
-        alert(JSON.stringify(m.data));
+        theDiv.innerHTML += '<br>'+m.data;
         channel.send('pong');
     };
 };
-client.onclosedconnection = error('onclosedconnection');;
 client.onaddstream = error('onaddstream');
 client.onconnection = error('onconnection');
 
@@ -37,16 +41,16 @@ navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
     });
 }, error('mozGetUserMedia'));
 
-function connecting() {
+function connecting(response) {
     console.log('connecting');
+    var json = JSON.parse(response);
+    var n = parseInt(json.key);
+
     // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
     // which should be fixed shortly.
-    client.connectDataConnection(5001, 5000);
+    client.connectDataConnection(6000+n, 5000+n);
 }
 </script>
-</head>
-<body>
-<h1>Client</h1>
 </body>
 </html>
 

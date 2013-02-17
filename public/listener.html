@@ -1,57 +1,80 @@
 <html>
 <head>
 <title>Server</title>
+</head>
+<body>
+<h1>Server</h1>
+<div id="foo"></div>
 <script type="text/javascript">
 'use strict';
 
 var RTCPeerConnection = mozRTCPeerConnection;
 var RTCSessionDescription = mozRTCSessionDescription;
 
-var server = new RTCPeerConnection();
+var registry = {};
 
 function error(s) { return function() { console.log('ERR: '+s); }; }
 
-server.onconnection = function() { 
-    console.log('onconnection');
-    var chan = server.createDataChannel('test', {});
-    chan.onopen = function() { console.log('onopen'); chan.send('ping'); };
-    chan.onmessage = function(m) {
-        console.log('onmessage');
-        alert(JSON.stringify(m.data));
-    };
-};
-server.onclosedconnection = error('onclosedconnection');
-server.onaddstream = error('onaddstream');
-server.ondatachannel = error('ondatachannel');
+var theDiv = document.getElementById('foo');
 
-// This fake audio stream nonsense is a bug.
-navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
+function makeListener(s, k) {
+    var server = new RTCPeerConnection();
+
+    registry[k] = server;
+
+    server.onconnection = function() { 
+        console.log('onconnection');
+        var chan = server.createDataChannel('test', { outOfOrderAllowed: true, maxRetransmitNum: 0, reliable: false });
+        chan.onopen = function() { console.log('onopen'); chan.send('ping'); };
+        chan.onmessage = function(m) {
+            console.log('onmessage');
+            theDiv.innerHTML += '<br>'+m.data;
+        };
+        chan.onclose = function() {
+            console.log('onclose');
+            server.close();
+            makeListener(s, k);
+        };
+    };
+    server.onstatechange = function(evt) {
+        console.log(JSON.stringify(evt));
+        if(evt.state === 'closed') {
+            makeListener(s, k); // re-register this as available
+        }
+    };
+    server.onaddstream = error('onaddstream');
+    server.ondatachannel = error('ondatachannel');
+
     server.addStream(s);
 
     server.createOffer(function(offer) {
+    webSocket.send(JSON.stringify({endpoint: 'test', key: k.toString(), sdp: offer.sdp}));
     server.setLocalDescription(offer, function() {
-        var webSocket = new WebSocket('ws://localhost:8181', 'browserhub');
-        webSocket.onopen = function() {
-            webSocket.send(JSON.stringify({endpoint: 'test', key: '1', sdp: offer.sdp}));
-        };
-        webSocket.onclose = function() {};
-        webSocket.onmessage = function(evt) {
-            var json = { sdp: JSON.parse(evt.data).remotesdp, type: 'answer' };
-            server.setRemoteDescription(new RTCSessionDescription(json), connecting, error('setRemoteDescription'));
-        };
     }, error('setLocalDescription')); }, error('createOffer'));
-}, error('mozGetUserMedia'));
-
-function connecting() {
-    console.log('connecting');
-    // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
-    // which should be fixed shortly.
-    server.connectDataConnection(5000, 5001);
 }
+
+var webSocket = new WebSocket('ws://localhost:8181', 'browserhub');
+webSocket.onclose = error('onclose');
+webSocket.onmessage = function(evt) {
+    var json = JSON.parse(evt.data);
+    var sdp = { sdp: json.remotesdp, type: 'answer' };
+    var server = registry[json.key];
+    var n = parseInt(json.key);
+    server.setRemoteDescription(new RTCSessionDescription(sdp), function() {
+        // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
+        // which should be fixed shortly.
+        server.connectDataConnection(5000+n, 6000+n);
+    }, error('setRemoteDescription'));
+};
+webSocket.onopen = function() {
+    // This fake audio stream nonsense is a bug.
+    navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
+        for(var k = 0; k < 10; k++) {
+            makeListener(s, k);
+        }
+    }, error('mozGetUserMedia'));
+};
 </script>
-</head>
-<body>
-<h1>Server</h1>
 </body>
 </html>
 

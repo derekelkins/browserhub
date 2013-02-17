@@ -34,7 +34,7 @@ var server = http.createServer(function(request, response) {
             var sdp = json.sdp;
             if(endpoint && sdp && endpoint in endpoints && endpoints[endpoint].length > 0) {
                 var local = endpoints[endpoint].shift();
-                response.write(JSON.stringify({ sdp: local.sdp }));
+                response.write(JSON.stringify({ sdp: local.sdp, key: local.key }));
                 response.end();
                 local.webSocket.sendUTF(JSON.stringify({ key: local.key, remotesdp: sdp }));
             } else {
