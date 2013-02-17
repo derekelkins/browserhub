@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>Server</title>
+<script type="text/javascript">
+'use strict';
+
+var RTCPeerConnection = mozRTCPeerConnection;
+var RTCSessionDescription = mozRTCSessionDescription;
+
+var server = new RTCPeerConnection();
+
+function error(s) { return function() { console.log('ERR: '+s); }; }
+
+server.onconnection = function() { 
+    console.log('onconnection');
+    var chan = server.createDataChannel('test', {});
+    chan.onopen = function() { console.log('onopen'); chan.send('ping'); };
+    chan.onmessage = function(m) {
+        console.log('onmessage');
+        alert(JSON.stringify(m.data));
+    };
+};
+server.onclosedconnection = error('onclosedconnection');
+server.onaddstream = error('onaddstream');
+server.ondatachannel = error('ondatachannel');
+
+// This fake audio stream nonsense is a bug.
+navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
+    server.addStream(s);
+
+    server.createOffer(function(offer) {
+    server.setLocalDescription(offer, function() {
+        var webSocket = new WebSocket('ws://localhost:8181', 'browserhub');
+        webSocket.onopen = function() {
+            webSocket.send(JSON.stringify({endpoint: 'test', key: '1', sdp: offer.sdp}));
+        };
+        webSocket.onclose = function() {};
+        webSocket.onmessage = function(evt) {
+            var json = { sdp: JSON.parse(evt.data).remotesdp, type: 'answer' };
+            server.setRemoteDescription(new RTCSessionDescription(json), connecting, error('setRemoteDescription'));
+        };
+    }, error('setLocalDescription')); }, error('createOffer'));
+}, error('mozGetUserMedia'));
+
+function connecting() {
+    console.log('connecting');
+    // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
+    // which should be fixed shortly.
+    server.connectDataConnection(5000, 5001);
+}
+</script>
+</head>
+<body>
+<h1>Server</h1>
+</body>
+</html>
+

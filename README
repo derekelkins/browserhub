@@ -1,0 +1,19 @@
+Right now this is a prototype of a server for facilitating the signalling
+required in WebRTC.
+
+The ideal goal would be for browsers to be able to directly wait for and accept
+WebRTC offers making this unnecessary, but that would require a new standard or
+an extension of the current WebRTC standard.  Failing that, the vision is to be
+able to have the choice to run this server locally (and have it be as small and
+simple as possible) or connect to an open, distributed service to provide this
+mediation, this server serving as the nodes in that service.
+
+The purpose of this is to allow server-like applications to be built in the
+browser.  Of course, there is likely to be a high degree of churn as people
+don't just leave there browsers open all the time (...) so the structure of
+these networks are likely to be more peer-to-peer.
+
+Orchestration would be another opportunity on a slightly longer timeline.  For
+example, you go to your cloud storage and say you want to upload a file, it
+gives you an SDP offer which, instead of using yourself, you pass to another
+site which then directly uploads the file to your cloud storage.
