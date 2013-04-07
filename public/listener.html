@@ -17,15 +17,15 @@ function error(s) { return function() { console.log('ERR: '+s); }; }
 
 var theDiv = document.getElementById('foo');
 
-function makeListener(s, k) {
+function makeListener(k) {
     var server = new RTCPeerConnection();
 
     registry[k] = server;
 
+    var chan = server.createDataChannel('test', {}); // { outOfOrderAllowed: true, maxRetransmitNum: 0, reliable: false });
     server.onconnection = function() { 
         console.log('onconnection');
-        var chan = server.createDataChannel('test', { outOfOrderAllowed: true, maxRetransmitNum: 0, reliable: false });
-        chan.onopen = function() { console.log('onopen'); chan.send('ping'); };
+        chan.onopen = function() { console.log('onopen'); chan.send('{"ping":""}'); };
         chan.onmessage = function(m) {
             console.log('onmessage');
             theDiv.innerHTML += '<br>'+m.data;
@@ -33,24 +33,34 @@ function makeListener(s, k) {
         chan.onclose = function() {
             console.log('onclose');
             server.close();
-            makeListener(s, k);
+            makeListener(k);
         };
     };
     server.onstatechange = function(evt) {
-        console.log(JSON.stringify(evt));
+        console.log(evt);
         if(evt.state === 'closed') {
-            makeListener(s, k); // re-register this as available
+            makeListener(k); // re-register this as available
         }
     };
-    server.onaddstream = error('onaddstream');
-    server.ondatachannel = error('ondatachannel');
+    server.onaddstream = function(evt) {
+        console.log('addStream');
+        console.log(evt);
+        if(/*evt.stream.tracks > 0 && */ evt.type === 'video') {
+            var video = document.createElement('video');
+            theDiv.appendChild(video);
+            video.src = window.URL.createObjectURL(evt.stream);
+            video.play();
+        }
+    };
 
-    server.addStream(s);
+    server.onremovestream = error('onremovestream');
+
+    server.ondatachannel = error('ondatachannel');
 
     server.createOffer(function(offer) {
     webSocket.send(JSON.stringify({endpoint: 'test', key: k.toString(), sdp: offer.sdp}));
     server.setLocalDescription(offer, function() {
-    }, error('setLocalDescription')); }, error('createOffer'));
+    }, error('setLocalDescription')); }, error('createOffer'), { optional: [{ OfferToReceiveVideo: true }] });
 }
 
 var webSocket = new WebSocket('ws://localhost:8181', 'browserhub');
@@ -59,22 +69,14 @@ webSocket.onmessage = function(evt) {
     var json = JSON.parse(evt.data);
     var sdp = { sdp: json.remotesdp, type: 'answer' };
     var server = registry[json.key];
-    var n = parseInt(json.key);
     server.setRemoteDescription(new RTCSessionDescription(sdp), function() {
-        // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
-        // which should be fixed shortly.
-        server.connectDataConnection(5000+n, 6000+n);
     }, error('setRemoteDescription'));
 };
 webSocket.onopen = function() {
-    // This fake audio stream nonsense is a bug.
-    navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
-        for(var k = 0; k < 10; k++) {
-            makeListener(s, k);
-        }
-    }, error('mozGetUserMedia'));
+    for(var k = 0; k < 10; k++) {
+        makeListener(k);
+    }
 };
 </script>
 </body>
 </html>
-

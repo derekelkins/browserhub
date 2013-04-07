@@ -14,23 +14,42 @@ var RTCSessionDescription = mozRTCSessionDescription;
 
 var client = new RTCPeerConnection();
 var theDiv = document.getElementById('foo');
+var doVideo = /video/.test(window.location.search);
 
 function error(s) { return function() { console.log('ERR: '+s); }; }
 
-client.ondatachannel = function(channel) {
+var dataChannel;
+
+client.ondatachannel = function(evt) {
+    dataChannel = evt.channel;
     console.log('ondatachannel');
-    channel.onmessage = function(m) {
+    dataChannel.onmessage = function(m) {
         console.log('onmessage');
         theDiv.innerHTML += '<br>'+m.data;
-        channel.send('pong');
+        dataChannel.send('{"pong":""}');
     };
 };
-client.onaddstream = error('onaddstream');
+client.onaddstream = function(stream) {
+    console.log('addStream');
+    console.log(stream);
+};
+client.onremovestream = error('onremovestream');
+
 client.onconnection = error('onconnection');
 
-// This fake audio stream nonsense is a bug.
-navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
-    client.addStream(s);
+if(doVideo) {
+    navigator.mozGetUserMedia({video: true}, function(s) {
+        $.getJSON('/?endpoint=test', function(json) {
+            json.type = 'offer';
+            client.addStream(s);
+            client.setRemoteDescription(new RTCSessionDescription(json), function() {
+            client.createAnswer(function(answer) {
+            client.setLocalDescription(answer, function() {
+            $.post('/', JSON.stringify({endpoint: 'test', sdp: answer.sdp}), connecting);
+            }, error('setLocalDescription')); }, error('createAnswer')); }, error('setRemoteDescription'));
+        });
+    }, error('mozGetUserMedia'));
+} else {
     $.getJSON('/?endpoint=test', function(json) {
         json.type = 'offer';
         client.setRemoteDescription(new RTCSessionDescription(json), function() {
@@ -39,18 +58,12 @@ navigator.mozGetUserMedia({audio: true, fake: true}, function(s) {
         $.post('/', JSON.stringify({endpoint: 'test', sdp: answer.sdp}), connecting);
         }, error('setLocalDescription')); }, error('createAnswer')); }, error('setRemoteDescription'));
     });
-}, error('mozGetUserMedia'));
+}
 
 function connecting(response) {
     console.log('connecting');
-    var json = JSON.parse(response);
-    var n = parseInt(json.key);
-
-    // See https://bugzilla.mozilla.org/show_bug.cgi?id=837035
-    // which should be fixed shortly.
-    client.connectDataConnection(6000+n, 5000+n);
+    console.log(JSON.parse(response));
 }
 </script>
 </body>
 </html>
-
